@@ -11,12 +11,36 @@ load_dotenv()
 import requests
 
 #NOT NEEDED
+from typing import Any
 
-    
+
+#---------------------------
+from mariadb import connect, Error
+
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+user = os.getenv("DB_USERNAME")
+password = os.getenv("DB_PASSWORD")
+database = os.getenv("DB_NAME")
+host = os.getenv("DB_HOST")
+port = int(os.getenv("DB_PORT"))
+
+
+try:
+    connection = connect(user=user, password=password, host=host, database=database, port=port)
+    print("Connection to MariaDB Platform successful")
+except Error as e:
+    print(f"Error connecting to MariaDB Platform: {e}")
+
+#--------------------------
+
     
 AI_URL = "http://192.168.53.197:5001/predict/"
 
-@mcp.tool("Get Diabetes Score")
+@mcp.tool("Get_Diabetes_Score")
 def get_diabetes_score(
     age: int,
     gender: str,
@@ -76,47 +100,138 @@ def get_diabetes_score(
 
 
 
-@mcp.tool("Get Hypertension Score")
-def get_hypertension_score(patient_data: dict) -> float:
+@mcp.tool("Get_Cardiovascular_Score")
+def get_cardiovascular_score(
+    age: int,
+    gender: int,
+    height: float,
+    weight: float,
+    ap_hi: int,
+    ap_lo: int,
+    cholesterol: int,
+    gluc: int,
+    smoke: int,
+    alco: int,
+    active: int
+) -> dict:
     """
-    Get the hypertension risk score for a patient based on their data.
+    Get the cardiovascular risk score for a patient based on their data.
 
     Args:
-        patient_data (dict): A dictionary containing the patient's data.
+        age (int): Age in years.
+        gender (int): 1 = Female, 2 = Male.
+        height (float): Height in centimeters.
+        weight (float): Weight in kilograms.
+        ap_hi (int): Systolic blood pressure.
+        ap_lo (int): Diastolic blood pressure.
+        cholesterol (int): 1 = Normal, 2 = Above normal, 3 = Well above normal.
+        gluc (int): Glucose level (1 = Normal, 2 = Above normal, 3 = Well above normal).
+        smoke (int): 0 = No, 1 = Yes.
+        alco (int): Alcohol consumption (0 = No, 1 = Yes).
+        active (int): Physical activity (0 = No, 1 = Yes).
 
     Returns:
-        float: The hypertension risk score for the patient.
+        dict: 
     """
-    pass
+    payload = {  "age": 50,  "gender": 2,  "height": 175,  "weight": 80,  "ap_hi": 140,  "ap_lo": 90,  "cholesterol": 2,  "gluc": 1,  "smoke": 1,  "alco": 0,  "active": 1}
+    try:
+        response = requests.post(AI_URL + "cardiovascular", json=payload, timeout=10)
+        response.raise_for_status()
+        print(response.json())
+        return response.json()
+    except requests.RequestException as e:
+        return {
+            "error": str(e),
+            "input_data": payload
+        }
     
 #TODO
-@mcp.tool("Get Patient Data")
-def get_patient_data(patient_id: str) -> dict:
+def execute_query(query: str) -> str:
+    """
+    Executes a SQL query on the hospital database.
+
+    Args:
+        query (str): The SQL query to execute.
+
+    Returns:
+        str: The result of the query execution.
+    """
+    cursor = None
+    try:
+        cursor = connection.cursor()
+        cursor.execute(query)
+
+        # For SELECT or SHOW queries, fetch and return results
+        if query.strip().upper().startswith(("SELECT", "SHOW", "DESCRIBE")):
+            result = cursor.fetchall()
+            return str(result)
+        # For INSERT, UPDATE, DELETE, commit and return affected rows
+        else:
+            connection.commit()
+            return f"Query executed successfully. Rows affected: {cursor.rowcount}"
+
+    except Error as e:
+        return f"Error executing query: {e}"
+    finally:
+        if cursor:
+            cursor.close()
+
+
+@mcp.tool("Get_Patient_Data")
+def get_patient_data(patient_id: int) -> str:
     """
     Get the patient data for a given patient ID.
     
     Args:
-        patient_id (str): The ID of the patient to retrieve data for.
+        patient_id (int): The ID of the patient to retrieve data for.
     
     Returns:
-        dict: A dictionary containing the patient's data.
+        str: A dictionary containing the patient's data.
     """
-    pass
+    return execute_query(f"SELECT * FROM patients WHERE id = {patient_id}")
 
-@mcp.tool("Use XGBoost Model for confidence score")
-def use_xgboost_model(data: dict) -> float:
+@mcp.tool("Get_Lab_Reports")
+def get_lab_reports(patient_id: int) -> str:
     """
-    Use the XGBoost model to get a confidence score for the given data.
+    Get all lab reports for a given patient ID.
     
     Args:
-        data (dict): The input data for the model.
+        patient_id (int): The ID of the patient to retrieve lab reports for.
     
     Returns:
-        float: The confidence score from the model.
+        str: A list of dictionaries containing the patient's lab reports.
     """
-    pass
+    return execute_query(f"SELECT * FROM lab_report WHERE patient_id = {patient_id}")
 
-@mcp.tool("Chat with MedGEMMA LLM")
+@mcp.tool("Get_EMH")
+def get_emh(patient_id: int) -> str:
+    """
+    Get the EMH record for a given patient ID.
+    
+    Args:
+        patient_id (int): The ID of the patient to retrieve the EMH for.
+    
+    Returns:
+        str: A dictionary containing the patient's EMH record.
+    """
+    return execute_query(f"SELECT * FROM EMH WHERE patient_id = {patient_id}")
+
+@mcp.tool("Update_EMH")
+def update_emh(patient_id: int, record: str) -> str:
+    """
+    Update the EMH record for a given patient.
+    
+    Args:
+        patient_id (int): The ID of the patient to update the EMH for.
+        record (str): The new EMH record.
+    
+    Returns:
+        str: Confirmation of the update.
+    """
+    return execute_query(f"UPDATE EMH SET record = '{record}' WHERE patient_id = {patient_id}")
+    
+
+'''@mcp.tool("Chat_With_Med_GEMMA")
 def chat_with_medgemma(message: str) -> str:
     """
     Chat with the MedGEMMA LLM using the provided message.
@@ -131,18 +246,8 @@ def chat_with_medgemma(message: str) -> str:
 
     model = ChatOllama(model="alibayram/medgemma:4b", temperature=0)
     response = model.invoke(message)
-    return response.content
+    return response.content'''
 
-#TODO
-@mcp.prompt()
-def _data_prompt() -> str:
-    """
-    Prompt for patient data input.
-    
-    Returns:
-        str: A string containing the patient data input.
-    """
-    pass
 
 if __name__ == "__main__":
     mcp.run(

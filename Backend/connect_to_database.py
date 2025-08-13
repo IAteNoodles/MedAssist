@@ -44,7 +44,19 @@ def change_database(new_database: str) -> str:
         return f"Error changing database: {e}"
 
 
-@mcp.tool
+@mcp.tool()
+def describe_tables() -> str:
+    """
+    Describes the tables in the hospital database.
+
+    Returns:
+        str: A description of the tables in the database.
+    """
+    query = "SHOW TABLES;"
+    return execute_query(query)
+
+
+@mcp.tool()
 def execute_query(query: str) -> str:
     """
     Executes a SQL query on the hospital database.

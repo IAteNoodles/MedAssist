@@ -121,4 +121,19 @@ async def extract_data_from_pdf(file: UploadFile = File(...)):
 
 if __name__ == "__main__":
     import uvicorn
+    import socket
+    def get_network_ip():
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            # doesn't have to be reachable
+            s.connect(('10.255.255.255', 1))
+            IP = s.getsockname()[0]
+        except Exception:
+            IP = '127.0.0.1'
+        finally:
+            s.close()
+        return IP
+
+    network_ip = get_network_ip()
+    print(f"Server running at http://0.0.0.0:8004 (use http://{network_ip}:8004 to access from other devices on your network)")
     uvicorn.run(app, host="0.0.0.0", port=8004, log_level="debug")
