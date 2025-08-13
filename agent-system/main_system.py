@@ -1,14 +1,14 @@
 import os
 import operator
-from typing import TypedDict, Annotated, List, Optional
+from typing import TypedDict, Annotated, List, Optional, Callable, cast
 
 from langchain_core.messages import AnyMessage, HumanMessage, AIMessage, BaseMessage
 from langchain_groq import ChatGroq # CHANGED: Import ChatGroq instead of ChatOpenAI
 from langchain.pydantic_v1 import BaseModel, Field
 from langgraph.graph import StateGraph, END
 
-# Import the MCP server tools
-from mcp import get_diabetes_score, get_hypertension_score
+# Import the local MCP-exposed tools (mock implementations here)
+from models import get_diabetes_score, get_hypertension_score
 
 # --- 1. Define Model Parameter Schemas ---
 # (This section remains unchanged)
@@ -86,12 +86,24 @@ def analyze_intent_node(state: AgentState):
         }
 
     extracted_tool = ai_message.tool_calls[0]
-    intent = extracted_tool["name"]
-    extracted_data = extracted_tool["args"]
+    tool_name = extracted_tool.get("name")
+    # Map tool name back to our intent keys (since binding uses class names)
+    if tool_name == DiabetesParams.__name__:
+        intent = "predict_diabetes"
+        tool_cls = DiabetesParams
+    elif tool_name == HypertensionParams.__name__:
+        intent = "predict_hypertension"
+        tool_cls = HypertensionParams
+    else:
+        return {
+            "messages": state['messages'] + [AIMessage(content=f"Unrecognized tool '{tool_name}'. Please rephrase your request.")]
+        }
+
+    extracted_data = extracted_tool.get("args", {})
 
     cleaned_data = {k: v for k, v in extracted_data.items() if v is not None}
     
-    required_params = list(tools[intent].__fields__.keys())
+    required_params = list(tool_cls.__fields__.keys())
 
     return {
         "intent": intent,
@@ -109,20 +121,19 @@ def execute_model_node(state: AgentState):
     result = {}
 
     if intent == "predict_diabetes":
-        # The tool function expects keyword arguments, so we unpack the data dict.
-        model_output = get_diabetes_score(**data)
-        # We'll store the full output but also keep the simple format for the report generator
+        # Current local tool may be a decorated tool wrapper; cast to callable
+        score = cast(Callable[[dict], float], get_diabetes_score)(data)
         result = {
-            "disease": "Diabetes", 
-            "risk_score": model_output.get("risk_probability"),
-            "full_report": model_output
+            "disease": "Diabetes",
+            "risk_score": score,
+            "full_report": {"risk_probability": score, "inputs": data},
         }
     elif intent == "predict_hypertension":
-        model_output = get_hypertension_score(**data)
+        score = cast(Callable[[dict], float], get_hypertension_score)(data)
         result = {
-            "disease": "Hypertension", 
-            "risk_score": model_output.get("risk_probability"),
-            "full_report": model_output
+            "disease": "Hypertension",
+            "risk_score": score,
+            "full_report": {"risk_probability": score, "inputs": data},
         }
 
     return {"model_result": result}

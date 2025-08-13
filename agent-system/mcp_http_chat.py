@@ -30,11 +30,11 @@ class MCPGroqChat:
         self.url = url
         self.llm_model = llm_model
         self.temperature = temperature
-        self.messages: List[Any] = []
+        self.messages = []
         self.exit_stack = AsyncExitStack()
-        self.client: Optional[Client] = None
+        self.client = None
         self.lc_tools = []
-        self.llm = ChatGroq(model=self.llm_model, temperature=self.temperature)
+        self.llm = None
         self.llm_with_tools = None
 
     async def initialize(self):
@@ -52,6 +52,8 @@ class MCPGroqChat:
 
         # Build LangChain tools for function calling schema
         self.lc_tools = await get_langchain_tools(self.url)
+        # Initialize Groq LLM now that env vars are loaded
+        self.llm = ChatGroq(model=self.llm_model, temperature=self.temperature)
         self.llm_with_tools = self.llm.bind_tools(self.lc_tools)
 
     async def _execute_tool(self, name: str, arguments: Dict[str, Any]) -> str:
@@ -68,7 +70,12 @@ class MCPGroqChat:
         self.messages.append(HumanMessage(content=user_input))
 
         # First LLM pass to decide on tool usage
-        ai_msg = self.llm_with_tools.invoke(self.messages)
+        # Guard: ensure initialize() was called
+        if self.llm is None:
+            raise RuntimeError("MCPGroqChat not initialized. Call initialize() before process().")
+        # If tools haven't been bound yet, fall back to plain LLM
+        model_any: Any = self.llm_with_tools or self.llm
+        ai_msg = model_any.invoke(self.messages)
 
         if isinstance(ai_msg, AIMessage) and getattr(ai_msg, "tool_calls", None):
             # Record the assistant's tool-calling intent
@@ -85,8 +92,9 @@ class MCPGroqChat:
                 # Add tool result for the second LLM pass
                 self.messages.append(ToolMessage(content=out_text, tool_call_id=tc.get("id", f"call_{i}")))
 
-            # Second LLM pass with tool outputs
-            final_msg = self.llm.invoke(self.messages)
+            # Second LLM pass with tool outputs; disable tool calling to avoid API errors
+            final_model = (self.llm or model_any).bind_tools([], tool_choice="none")
+            final_msg = final_model.invoke(self.messages)
             if isinstance(final_msg, AIMessage):
                 self.messages.append(final_msg)
                 return final_msg.content if isinstance(final_msg.content, str) else str(final_msg.content)
