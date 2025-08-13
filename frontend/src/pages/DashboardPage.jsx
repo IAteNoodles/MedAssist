@@ -1,12 +1,12 @@
 import React from 'react';
-import Header from '../components/Header';
+import DashboardHeader from '../components/DashboardHeader';
 import Dashboard from '../components/Dashboard';
 import Footer from '../components/Footer';
 
-const Home = () => {
+const DashboardPage = () => {
   return (
     <div className="bg-gray-50 min-h-screen">
-      <Header />
+      <DashboardHeader />
       <main>
         <Dashboard />
       </main>
@@ -15,4 +15,4 @@ const Home = () => {
   );
 };
 
-export default Home;
+export default DashboardPage;
