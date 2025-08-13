@@ -3,7 +3,7 @@
 from fastmcp import FastMCP
 import random
 
-mcp = FastMCP("Hospital", base_url="http://192.168.53.216:8005/mcp/")
+mcp = FastMCP("Hospital")
 
 # --- Mock Implementations for Hackathon ---
 # In a real scenario, these would contain actual model logic or API calls.

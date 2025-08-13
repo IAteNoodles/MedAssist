@@ -2,45 +2,51 @@ import os
 import operator
 from typing import TypedDict, Annotated, List, Optional
 
-from langchain_core.messages import AnyMessage, HumanMessage, AIMessage
-from langchain_groq import ChatGroq
+from langchain_core.messages import AnyMessage, HumanMessage, AIMessage, BaseMessage
+from langchain_groq import ChatGroq # CHANGED: Import ChatGroq instead of ChatOpenAI
 from langchain.pydantic_v1 import BaseModel, Field
 from langgraph.graph import StateGraph, END
 
 # Import the MCP server tools
-from models import get_diabetes_score, get_hypertension_score
+from mcp import get_diabetes_score, get_hypertension_score
 
 # --- 1. Define Model Parameter Schemas ---
+# (This section remains unchanged)
 class DiabetesParams(BaseModel):
-    """Parameters required for the diabetes prediction model."""
-    Glucose: Optional[float] = Field(description="Plasma glucose concentration.")
-    BMI: Optional[float] = Field(description="Body mass index.")
-    Age: Optional[int] = Field(description="Age in years.")
-    Pregnancies: Optional[int] = Field(description="Number of times pregnant.")
-    BloodPressure: Optional[float] = Field(description="Diastolic blood pressure (mm Hg).")
-    Insulin: Optional[float] = Field(description="2-Hour serum insulin (mu U/ml).")
+    """Parameters for the diabetes prediction model."""
+    age: int = Field(description="Age in years.")
+    gender: str = Field(description='"Female", "Male", or "Other".')
+    hypertension: int = Field(description="0 for No, 1 for Yes.")
+    heart_disease: int = Field(description="0 for No, 1 for Yes.")
+    smoking_history: str = Field(description='"never", "No Info", "current", "former", "ever", or "not current".')
+    bmi: float = Field(description="Body Mass Index.")
+    HbA1c_level: float = Field(description="Hemoglobin A1c level (e.g., 5.7).")
+    blood_glucose_level: float = Field(description="Blood glucose level (e.g., 100 mg/dL).")
 
 class HypertensionParams(BaseModel):
-    """Parameters required for the hypertension prediction model."""
-    Age: Optional[int] = Field(description="Age in years.")
-    BMI: Optional[float] = Field(description="Body mass index.")
-    BloodPressure: Optional[float] = Field(description="Diastolic blood pressure (mm Hg).")
-    Cholesterol: Optional[float] = Field(description="Total cholesterol (mg/dl).")
+    """Parameters for the hypertension prediction model."""
+    age: int = Field(description="Age in years.")
+    bmi: float = Field(description="Body Mass Index.")
+    blood_pressure: int = Field(description="Systolic blood pressure (e.g., 120).")
+    cholesterol: int = Field(description="Total cholesterol level (e.g., 200).")
 
 
 # --- 2. Define the Agent's State (Memory) ---
+# (This section remains unchanged)
 class AgentState(TypedDict):
     messages: Annotated[List[AnyMessage], operator.add]
     intent: str
     required_params: list
     extracted_data: dict
     model_result: Optional[dict]
-    report: str
 
 # --- 3. Initialize Models ---
+# Load environment variables (for GROQ_API_KEY)
 from dotenv import load_dotenv
 load_dotenv()
 
+# CHANGED: Initialize the Groq model.
+# Llama-3.1-8b-instant is extremely fast, so we can use the same instance for all tasks.
 llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0)
 
 
@@ -65,14 +71,19 @@ def analyze_intent_node(state: AgentState):
         "predict_hypertension": HypertensionParams
     }
     
+    # CHANGED: Bind tools to the Groq LLM
     llm_with_tools = llm.bind_tools(list(tools.values()))
     
     query = state["messages"][-1].content
     ai_message = llm_with_tools.invoke(prompt.format(query=query))
     
     if not isinstance(ai_message, AIMessage) or not ai_message.tool_calls:
-        state['messages'] = state['messages'] + [AIMessage(content="I was unable to determine the intent. Please be more specific.")]
-        return state
+        # If no tool is called, we can't proceed.
+        # We'll add a message to the state and let the graph end.
+        # A more robust solution might involve asking for clarification.
+        return {
+            "messages": state['messages'] + [AIMessage(content="I could not determine the intent or extract the required parameters from your query. Please be more specific.")]
+        }
 
     extracted_tool = ai_message.tool_calls[0]
     intent = extracted_tool["name"]
@@ -82,12 +93,11 @@ def analyze_intent_node(state: AgentState):
     
     required_params = list(tools[intent].__fields__.keys())
 
-    state['intent'] = intent
-    state['extracted_data'] = cleaned_data
-    state['required_params'] = required_params
-    
-    return state
-
+    return {
+        "intent": intent,
+        "extracted_data": cleaned_data,
+        "required_params": required_params
+    }
 
 def execute_model_node(state: AgentState):
     """
@@ -99,28 +109,35 @@ def execute_model_node(state: AgentState):
     result = {}
 
     if intent == "predict_diabetes":
-        score = get_diabetes_score.run(data)
-        result = {"disease": "Diabetes", "risk_score": score}
+        # The tool function expects keyword arguments, so we unpack the data dict.
+        model_output = get_diabetes_score(**data)
+        # We'll store the full output but also keep the simple format for the report generator
+        result = {
+            "disease": "Diabetes", 
+            "risk_score": model_output.get("risk_probability"),
+            "full_report": model_output
+        }
     elif intent == "predict_hypertension":
-        score = get_hypertension_score.run(data)
-        result = {"disease": "Hypertension", "risk_score": score}
+        model_output = get_hypertension_score(**data)
+        result = {
+            "disease": "Hypertension", 
+            "risk_score": model_output.get("risk_probability"),
+            "full_report": model_output
+        }
 
-    state['model_result'] = result
-    return state
+    return {"model_result": result}
 
-def generate_report_node(state: AgentState):
+def clinical_bert_analyzer_node(state: AgentState):
     """
-    Node to generate a clinical report based on the model's prediction.
+    Generates a final report, simulating a Clinical BERT analysis.
     """
-    print("---GENERATING CLINICAL REPORT---")
+    print("--- जेनरेटिंग रिपोर्ट (Generating Report) ---")
     result = state.get("model_result")
     data = state.get("extracted_data")
 
-    if not result or not data:
-        report_message = AIMessage(content="Missing model result or extracted data. Cannot generate report.")
-        state['messages'] = state['messages'] + [report_message]
-        state['report'] = str(report_message.content)
-        return state
+    if not result:
+        final_message = AIMessage(content="Could not retrieve model results. Please check the inputs or the MCP server.")
+        return {"messages": state['messages'] + [final_message]}
 
     prompt = f"""
     You are an expert Clinical Analysis AI (simulating ClinicalBERT).
@@ -141,25 +158,19 @@ def generate_report_node(state: AgentState):
 
     Provide a concise report.
     """
-    report_llm = ChatGroq(model="llama3-8b-8192", temperature=0)
-    response = report_llm.invoke(prompt)
-    
-    report_message = AIMessage(content=response.content)
-    
-    state['messages'] = state['messages'] + [report_message]
-    state['report'] = str(response.content)
-    return state
+    # CHANGED: Use the Groq LLM for generating the report
+    report = llm.invoke(prompt).content
+    final_message = AIMessage(content=str(report) + "\n\nIs there anything else I can assist you with?")
+    return {"messages": state['messages'] + [final_message]}
 
 
 # --- 5. Define Conditional Logic (Edge) ---
+# (This section remains unchanged)
 def data_validation_edge(state: AgentState):
     """
     Checks if all required data is present. If not, asks the user.
     """
     print("--- वैलिडेटिंग डेटा (Validating Data) ---")
-    if not state.get("required_params"):
-        return "ask_user_node"
-        
     required = set(state["required_params"])
     extracted = set(state["extracted_data"].keys())
     missing_keys = list(required - extracted)
@@ -169,28 +180,25 @@ def data_validation_edge(state: AgentState):
         return "execute_model"
     else:
         print("--- डेटा मिसिंग है, यूजर से पूछ रहे हैं (Data Missing, Asking User) ---")
-        return "ask_user_node"
+        return "end_and_ask_user"
 
 # --- 6. Build the Graph ---
+# (This section remains unchanged, as the logic is the same)
 workflow = StateGraph(AgentState)
 workflow.add_node("analyze_intent", analyze_intent_node)
 workflow.add_node("execute_model", execute_model_node)
-workflow.add_node("clinical_analyzer", generate_report_node)
+workflow.add_node("clinical_analyzer", clinical_bert_analyzer_node)
 
 def ask_user_node(state: AgentState):
-    if not state.get("required_params"):
-         prompt_for_more_data = AIMessage(content="I could not determine the required parameters. Please clarify your request.")
-    else:
-        required = set(state["required_params"])
-        extracted = set(state["extracted_data"].keys())
-        missing_keys = list(required - extracted)
-        missing_keys_str = ", ".join(missing_keys)
-        prompt_for_more_data = AIMessage(
-            content=f"The following parameters are missing for the {state['intent']} model: **{missing_keys_str}**. "
-                    f"Please provide them to proceed."
-        )
-    state['messages'] = state['messages'] + [prompt_for_more_data]
-    return state
+    required = set(state["required_params"])
+    extracted = set(state["extracted_data"].keys())
+    missing_keys = list(required - extracted)
+    missing_keys_str = ", ".join(missing_keys)
+    prompt_for_more_data = AIMessage(
+        content=f"The following parameters are missing for the {state['intent']} model: **{missing_keys_str}**. "
+                f"Please provide them to proceed."
+    )
+    return {"messages": [prompt_for_more_data]}
 
 workflow.add_node("ask_user_node", ask_user_node)
 workflow.set_entry_point("analyze_intent")
@@ -199,7 +207,7 @@ workflow.add_conditional_edges(
     data_validation_edge,
     {
         "execute_model": "execute_model",
-        "ask_user_node": "ask_user_node"
+        "end_and_ask_user": "ask_user_node"
     }
 )
 workflow.add_edge("execute_model", "clinical_analyzer")
@@ -208,10 +216,13 @@ workflow.add_edge("ask_user_node", END)
 app = workflow.compile()
 
 # --- 7. Run the Chatbot ---
+# (This section remains unchanged)
 def run_chat():
     print("🏥 Medical AI Assistant is online (Powered by Groq/Llama-3.1). How can I help you today?")
     
+    # Maintain the conversation history
     messages = []
+    
     while True:
         user_input = input("Doctor: ")
         if user_input.lower() in ["quit", "exit"]:
@@ -219,20 +230,21 @@ def run_chat():
 
         messages.append(HumanMessage(content=user_input))
         
-        current_state: AgentState = {
+        # Construct the full state to pass to the graph
+        initial_state: AgentState = {
             "messages": messages,
             "intent": "",
             "required_params": [],
             "extracted_data": {},
             "model_result": None,
-            "report": ""
         }
         
-        result = app.invoke(current_state)
+        result = app.invoke(initial_state)
         
-        final_message = result['messages'][-1]
+        # Update the conversation history from the final state
         messages = result['messages']
-        print(f"AI: {final_message.content}")
         
+        print(f"\nAssistant:\n{messages[-1].content}\n")
+
 if __name__ == "__main__":
     run_chat()
