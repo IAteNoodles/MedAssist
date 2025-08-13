@@ -11,22 +11,6 @@ load_dotenv()
 import requests
 
 #NOT NEEDED
-'''@mcp.tool("Get Top K Chunks")
-def get_top_k_chunks(query: str, k: int = 5) -> list:
-    """
-    Get the top K chunks from the knowledge base that are most relevant to the query.
-    
-    Args:
-        query (str): The query string to search for.
-        k (int): The number of top chunks to return. Default is 5.
-    
-    Returns:
-        list: A list of dictionaries containing the top K chunks.
-    """
-    
-    pass'''
-
-
 
     
     
@@ -84,23 +68,22 @@ def use_xgboost_model(data: dict) -> float:
     """
     pass
 
-@mcp.tool("Use LLM to generate medical report with symptoms and diagnosis")
-def generate_medical_report():
+@mcp.tool("Chat with MedGEMMA LLM")
+def chat_with_medgemma(message: str) -> str:
     """
-    Use a large language model (LLM) to generate a medical report based on symptoms and diagnosis.
-    
-    #TODO Add parameters for symptoms and diagnosis
+    Chat with the MedGEMMA LLM using the provided message.
+
+    Args:
+        message (str): The message to send to the LLM.
 
     Returns:
-        str: The generated medical report.
+        str: The response from the LLM.
     """
     from langchain_ollama.chat_models import ChatOllama
 
     model = ChatOllama(model="alibayram/medgemma:4b", temperature=0)
-    response = model.invoke("Generate a medical report based on the provided symptoms and diagnosis.")
+    response = model.invoke(message)
     return response.content
-
-    #-------------------------PROMPTS-------------------------
 
 #TODO
 @mcp.prompt()
