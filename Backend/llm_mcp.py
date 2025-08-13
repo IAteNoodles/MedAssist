@@ -231,22 +231,35 @@ def update_emh(patient_id: int, record: str) -> str:
     return execute_query(f"UPDATE EMH SET record = '{record}' WHERE patient_id = {patient_id}")
     
 
-'''@mcp.tool("Chat_With_Med_GEMMA")
-def chat_with_medgemma(message: str) -> str:
+@mcp.tool("Chat_With_Med_GEMMA")
+def chat_with_medgemma(
+    summary: str,
+    symptoms: str,
+    predictions: str
+) -> str:
     """
-    Chat with the MedGEMMA LLM using the provided message.
+    Chat with the MedGEMMA LLM using the patient's summary, symptoms, and predictions.
 
     Args:
-        message (str): The message to send to the LLM.
+        summary (str): Patient summary. (Required)
+        symptoms (str): Patient symptoms. (Required)
+        predictions (str): Predictions from previous ML models. (Required)
 
     Returns:
         str: The response from the LLM.
     """
     from langchain_ollama.chat_models import ChatOllama
 
+    message = (
+        f"Patient summary: {summary}\n"
+        f"Symptoms: {symptoms}\n"
+        f"Predictions: {predictions}\n"
+        "Based on the above, generate differential diagnosis report, citing the possible diagnosis as well as thoroughly explaining the reasoning that diagnosis , also cite any recommended tests. Finish the report with list of cautions like patient's allergies, medications, and any other relevant information."
+    )
+
     model = ChatOllama(model="alibayram/medgemma:4b", temperature=0)
     response = model.invoke(message)
-    return response.content'''
+    return response.content
 
 
 if __name__ == "__main__":
