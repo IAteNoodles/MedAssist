@@ -24,6 +24,44 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- helper ---------------------------------------------------------------
+
+def _extract_text_from_ocr_response(ocr_response) -> str:
+    """Normalize different possible OCR response shapes to plain text.
+    Supports SDK pydantic model objects or raw dict replies.
+    """
+    if ocr_response is None:
+        return ""
+    # If pydantic model, prefer model_dump() if available
+    if hasattr(ocr_response, "model_dump"):
+        try:
+            data = ocr_response.model_dump()
+        except Exception:
+            data = None
+    else:
+        data = None
+
+    pages = []
+    # Priority: direct attribute .pages
+    if hasattr(ocr_response, "pages") and ocr_response.pages is not None:
+        pages = ocr_response.pages
+    elif isinstance(data, dict) and isinstance(data.get("pages"), list):
+        pages = data.get("pages")
+    elif isinstance(ocr_response, dict) and isinstance(ocr_response.get("pages"), list):
+        pages = ocr_response.get("pages")
+
+    segments = []
+    for p in pages:
+        if p is None:
+            continue
+        if isinstance(p, dict):
+            seg = p.get("markdown") or p.get("text") or ""
+        else:  # object with attributes
+            seg = getattr(p, "markdown", None) or getattr(p, "text", "")
+        if seg:
+            segments.append(seg.strip())
+    return "\n\n".join(segments)
+
 
 @app.post("/extract-image")
 async def extract_data_from_image(file: UploadFile = File(...)):
@@ -34,26 +72,24 @@ async def extract_data_from_image(file: UploadFile = File(...)):
     import os
     from mistralai import Mistral
 
-    # Read file contents
-    contents = await file.read()
-    base64_image = base64.b64encode(contents).decode('utf-8')
+    try:
+        contents = await file.read()
+        base64_image = base64.b64encode(contents).decode('utf-8')
+        api_key = os.environ["MISTRAL_API_KEY"]
+        client = Mistral(api_key=api_key)
+        ocr_response = client.ocr.process(
+            model="mistral-ocr-latest",
+            document={
+                "type": "image_url",
+                "image_url": f"data:image/jpeg;base64,{base64_image}"
+            },
+            include_image_base64=False
+        )
+        text = _extract_text_from_ocr_response(ocr_response)
+        return {"text": text}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
-    api_key = os.environ["MISTRAL_API_KEY"]
-    client = Mistral(api_key=api_key)
-
-    ocr_response = client.ocr.process(
-        model="mistral-ocr-latest",
-        document={
-            "type": "image_url",
-            "image_url": f"data:image/jpeg;base64,{base64_image}"
-        },
-        include_image_base64=False  # disable image data in response
-    )
-    # Build plain text only
-    text = ""
-    if ocr_response and ocr_response.get("pages"):
-        text = "\n\n".join(page.get("markdown", "") for page in ocr_response["pages"])
-    return {"text": text}
 
 @app.post("/extract-pdf")
 async def extract_data_from_pdf(file: UploadFile = File(...)):
@@ -64,26 +100,24 @@ async def extract_data_from_pdf(file: UploadFile = File(...)):
     import os
     from mistralai import Mistral
 
-    # Read file contents
-    contents = await file.read()
-    base64_pdf = base64.b64encode(contents).decode('utf-8')
+    try:
+        contents = await file.read()
+        base64_pdf = base64.b64encode(contents).decode('utf-8')
+        api_key = os.environ["MISTRAL_API_KEY"]
+        client = Mistral(api_key=api_key)
+        ocr_response = client.ocr.process(
+            model="mistral-ocr-latest",
+            document={
+                "type": "document_url",
+                "document_url": f"data:application/pdf;base64,{base64_pdf}"
+            },
+            include_image_base64=False
+        )
+        text = _extract_text_from_ocr_response(ocr_response)
+        return {"text": text}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
-    api_key = os.environ["MISTRAL_API_KEY"]
-    client = Mistral(api_key=api_key)
-
-    ocr_response = client.ocr.process(
-        model="mistral-ocr-latest",
-        document={
-            "type": "document_url",
-            "document_url": f"data:application/pdf;base64,{base64_pdf}"
-        },
-        include_image_base64=False  # disable image data in response
-    )
-    # Build plain text only
-    text = ""
-    if ocr_response and ocr_response.get("pages"):
-        text = "\n\n".join(page.get("markdown", "") for page in ocr_response["pages"])
-    return {"text": text}
 
 if __name__ == "__main__":
     import uvicorn
