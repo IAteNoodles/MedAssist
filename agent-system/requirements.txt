@@ -1,0 +1,6 @@
+langchain
+langchain-groq
+langgraph
+fastmcp
+python-dotenv
+pydantic
