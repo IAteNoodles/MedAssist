@@ -465,6 +465,128 @@ def model_info():
         'shap_explanations': 'Available for both models'
     })
 
+
+NORMAL_RANGES = {
+    'male': {
+        'rbc': (4.5, 5.9),        # Red Blood Cell Count (x10^12/L)
+        'hemoglobin': (13.5, 17.5), # (g/dL)
+        'hematocrit': (41, 53),     # (%)
+    },
+    'female': {
+        'rbc': (4.0, 5.2),
+        'hemoglobin': (12.0, 15.5),
+        'hematocrit': (36, 46),
+    },
+    'common': {
+        # These parameters have ranges that are generally not sex-dependent
+        'wbc': (4.5, 11.0),       # White Blood Cell Count (x10^9/L)
+        'platelets': (150, 450),  # (x10^9/L)
+        'mcv': (80, 100),         # Mean Corpuscular Volume (fL)
+        'mch': (27, 32),          # Mean Corpuscular Hemoglobin (pg)
+        'mchc': (32, 36),         # Mean Corpuscular Hemoglobin Concentration (g/dL)
+        'rdw': (11.5, 14.5)       # Red Cell Distribution Width (%)
+    }
+}
+
+UNITS = {
+    'wbc': 'x10^9/L',
+    'rbc': 'x10^12/L',
+    'hemoglobin': 'g/dL',
+    'hematocrit': '%',
+    'platelets': 'x10^9/L',
+    'mcv': 'fL',
+    'mch': 'pg',
+    'mchc': 'g/dL',
+    'rdw': '%'
+}
+
+# --- Core Analysis Logic ---
+
+def analyze_cbc(sex: str, cbc_data: dict) -> dict:
+    """
+    Analyzes provided CBC data against predefined normal ranges based on sex.
+
+    Args:
+        sex (str): The patient's sex ('male' or 'female').
+        cbc_data (dict): A dictionary of CBC parameters and their values.
+
+    Returns:
+        dict: A dictionary containing a summary and a detailed analysis.
+    """
+    findings = []
+    abnormalities = []
+
+    # Combine common ranges with the appropriate sex-specific ranges
+    applicable_ranges = {**NORMAL_RANGES['common'], **NORMAL_RANGES[sex]}
+
+    for param, value in cbc_data.items():
+        param_lower = param.lower()
+        if param_lower in applicable_ranges:
+            low_bound, high_bound = applicable_ranges[param_lower]
+            unit = UNITS.get(param_lower, '')
+            status = "Normal"
+
+            # Check if the value is outside the normal range
+            if value < low_bound:
+                status = "Low"
+                abnormalities.append(f"{param.upper()} is low")
+            elif value > high_bound:
+                status = "High"
+                abnormalities.append(f"{param.upper()} is high")
+
+            findings.append({
+                "parameter": param.upper(),
+                "value": value,
+                "status": status,
+                "normal_range": f"{low_bound} - {high_bound} {unit}"
+            })
+
+    # Generate a concise summary of the findings
+    if not abnormalities:
+        summary = "All provided CBC parameters are within the normal range."
+    else:
+        summary = ". ".join(abnormalities) + "."
+
+    return {"summary": summary, "detailed_analysis": findings}
+
+
+# --- API Endpoint Definition ---
+
+@app.route('/analyze_cbc', methods=['POST'])
+def cbc_analyzer_api():
+    """
+    API endpoint to receive and process a CBC analysis request.
+    """
+    # 1. Get and validate the JSON payload from the request
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Invalid JSON payload"}), 400
+
+    # 2. Validate mandatory 'sex' parameter
+    sex = data.get('sex', '').lower()
+    if sex not in ['male', 'female']:
+        return jsonify({
+            "error": "Mandatory parameter 'sex' is missing or invalid. Must be 'male' or 'female'."
+        }), 400
+
+    # 3. Extract CBC parameters, excluding 'sex'
+    cbc_params = {k.lower(): v for k, v in data.items() if k.lower() != 'sex'}
+
+    if not cbc_params:
+        return jsonify({"error": "No CBC parameters provided for analysis."}), 400
+
+    # 4. Ensure all provided CBC values are numeric
+    try:
+        cbc_params_numeric = {k: float(v) for k, v in cbc_params.items()}
+    except (ValueError, TypeError):
+        return jsonify({"error": "All CBC parameter values must be numeric."}), 400
+
+    # 5. Call the analysis function and return the result
+    result = analyze_cbc(sex, cbc_params_numeric)
+    return jsonify(result), 200
+
+
+
 if __name__ == '__main__':
     # Load models on startup
     try:

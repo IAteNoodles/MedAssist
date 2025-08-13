@@ -1,16 +1,18 @@
 # MedAssist Prediction API Documentation
 
 ## Overview
-The MedAssist Prediction API provides machine learning-based predictions for:
+The MedAssist Prediction API provides machine learning-based predictions and medical analysis for:
 1. **Cardiovascular Disease Risk** - Using patient health metrics
 2. **Diabetes Risk** - Using metabolic and lifestyle factors
+3. **CBC (Complete Blood Count) Analysis** - Analyzing blood work parameters against normal ranges
 
-Both endpoints provide detailed explanations using SHAP (SHapley Additive exPlanations) to help understand how the model arrived at its predictions.
+The prediction endpoints provide detailed explanations using SHAP (SHapley Additive exPlanations) to help understand how the model arrived at its predictions, while the CBC analysis provides immediate interpretation of blood work results.
 
 ## Features
 - 🎯 **Accurate Predictions**: XGBoost models trained on medical datasets
 - 🔍 **Explainable AI**: SHAP explanations for model transparency
 - 📊 **Confidence Scores**: Probability scores and risk categorization
+- 🩸 **CBC Analysis**: Complete Blood Count interpretation with sex-specific normal ranges
 - 💡 **Health Recommendations**: Personalized recommendations based on risk factors
 - 🌐 **RESTful API**: Easy integration with web and mobile applications
 
@@ -30,7 +32,7 @@ cd /path/to/MedAssist/AI
 python prediction_api.py
 ```
 
-The API will start on `http://localhost:5000`
+The API will start on `http://localhost:5001`
 
 ## API Endpoints
 
@@ -212,6 +214,92 @@ Predict diabetes risk based on metabolic and lifestyle factors.
 }
 ```
 
+### 5. CBC (Complete Blood Count) Analysis
+**POST** `/analyze_cbc`
+
+Analyze CBC (Complete Blood Count) parameters against normal ranges based on patient sex.
+
+**Request Body:**
+```json
+{
+  "sex": "male",
+  "wbc": 8.5,
+  "rbc": 4.8,
+  "hemoglobin": 14.2,
+  "hematocrit": 42,
+  "platelets": 280,
+  "mcv": 85,
+  "mch": 29,
+  "mchc": 34,
+  "rdw": 13.1
+}
+```
+
+**Field Descriptions:**
+- `sex`: **Required** - "male" or "female" (affects normal ranges for some parameters)
+- `wbc`: White Blood Cell Count (x10^9/L) - Normal: 4.5-11.0
+- `rbc`: Red Blood Cell Count (x10^12/L) - Normal: Male 4.5-5.9, Female 4.0-5.2
+- `hemoglobin`: Hemoglobin level (g/dL) - Normal: Male 13.5-17.5, Female 12.0-15.5
+- `hematocrit`: Hematocrit percentage (%) - Normal: Male 41-53, Female 36-46
+- `platelets`: Platelet Count (x10^9/L) - Normal: 150-450
+- `mcv`: Mean Corpuscular Volume (fL) - Normal: 80-100
+- `mch`: Mean Corpuscular Hemoglobin (pg) - Normal: 27-32
+- `mchc`: Mean Corpuscular Hemoglobin Concentration (g/dL) - Normal: 32-36
+- `rdw`: Red Cell Distribution Width (%) - Normal: 11.5-14.5
+
+**Notes:**
+- Only the `sex` parameter is mandatory
+- You can provide any combination of the CBC parameters for analysis
+- All parameter values must be numeric
+- Parameter names are case-insensitive
+
+**Response:**
+```json
+{
+  "summary": "RBC is low. HEMOGLOBIN is low.",
+  "detailed_analysis": [
+    {
+      "parameter": "WBC",
+      "value": 8.5,
+      "status": "Normal",
+      "normal_range": "4.5 - 11.0 x10^9/L"
+    },
+    {
+      "parameter": "RBC",
+      "value": 4.2,
+      "status": "Low",
+      "normal_range": "4.5 - 5.9 x10^12/L"
+    },
+    {
+      "parameter": "HEMOGLOBIN",
+      "value": 12.8,
+      "status": "Low",
+      "normal_range": "13.5 - 17.5 g/dL"
+    },
+    {
+      "parameter": "HEMATOCRIT",
+      "value": 42,
+      "status": "Normal",
+      "normal_range": "41 - 53 %"
+    },
+    {
+      "parameter": "PLATELETS",
+      "value": 280,
+      "status": "Normal",
+      "normal_range": "150 - 450 x10^9/L"
+    }
+  ]
+}
+```
+
+**Response Fields:**
+- `summary`: A concise text summary of abnormal findings, or confirmation that all values are normal
+- `detailed_analysis`: Array of detailed analysis for each provided parameter
+  - `parameter`: CBC parameter name (uppercase)
+  - `value`: The provided value
+  - `status`: "Normal", "Low", or "High"
+  - `normal_range`: Normal range with units for the specific sex
+
 ## SHAP Explanations
 
 Both endpoints include detailed SHAP explanations that help understand:
@@ -254,17 +342,22 @@ Or test manually with curl:
 
 ```bash
 # Health check
-curl http://localhost:5000/health
+curl http://localhost:5001/health
 
 # Cardiovascular prediction
-curl -X POST http://localhost:5000/predict/cardiovascular \
+curl -X POST http://localhost:5001/predict/cardiovascular \
   -H "Content-Type: application/json" \
   -d '{"age": 50, "gender": 2, "height": 175, "weight": 80, "ap_hi": 140, "ap_lo": 90, "cholesterol": 2, "gluc": 1, "smoke": 1, "alco": 0, "active": 1}'
 
 # Diabetes prediction
-curl -X POST http://localhost:5000/predict/diabetes \
+curl -X POST http://localhost:5001/predict/diabetes \
   -H "Content-Type: application/json" \
   -d '{"age": 45, "gender": "Male", "hypertension": 1, "heart_disease": 0, "smoking_history": "former", "bmi": 28.5, "HbA1c_level": 6.2, "blood_glucose_level": 140}'
+
+# CBC analysis
+curl -X POST http://localhost:5001/analyze_cbc \
+  -H "Content-Type: application/json" \
+  -d '{"sex": "male", "wbc": 8.5, "rbc": 4.2, "hemoglobin": 12.8, "hematocrit": 42, "platelets": 280, "mcv": 85, "mch": 29, "mchc": 34, "rdw": 13.1}'
 ```
 
 ## Integration Example
@@ -275,7 +368,7 @@ curl -X POST http://localhost:5000/predict/diabetes \
 // Cardiovascular prediction
 async function predictCardiovascular(patientData) {
   try {
-    const response = await fetch('http://localhost:5000/predict/cardiovascular', {
+    const response = await fetch('http://localhost:5001/predict/cardiovascular', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -314,6 +407,47 @@ const patientData = {
 };
 
 predictCardiovascular(patientData);
+
+// CBC Analysis
+async function analyzeCBC(cbcData) {
+  try {
+    const response = await fetch('http://localhost:5001/analyze_cbc', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(cbcData)
+    });
+    
+    const result = await response.json();
+    
+    if (response.ok) {
+      console.log('Summary:', result.summary);
+      console.log('Detailed Analysis:', result.detailed_analysis);
+      return result;
+    } else {
+      console.error('Error:', result.error);
+    }
+  } catch (error) {
+    console.error('Network error:', error);
+  }
+}
+
+// Usage
+const cbcData = {
+  sex: "male",
+  wbc: 8.5,
+  rbc: 4.2,
+  hemoglobin: 12.8,
+  hematocrit: 42,
+  platelets: 280,
+  mcv: 85,
+  mch: 29,
+  mchc: 34,
+  rdw: 13.1
+};
+
+analyzeCBC(cbcData);
 ```
 
 ### Python Client Integration
@@ -323,7 +457,7 @@ import requests
 import json
 
 def predict_diabetes(patient_data):
-    url = "http://localhost:5000/predict/diabetes"
+    url = "http://localhost:5001/predict/diabetes"
     
     try:
         response = requests.post(url, json=patient_data)
@@ -353,6 +487,41 @@ patient_data = {
 }
 
 predict_diabetes(patient_data)
+
+def analyze_cbc(cbc_data):
+    url = "http://localhost:5001/analyze_cbc"
+    
+    try:
+        response = requests.post(url, json=cbc_data)
+        
+        if response.status_code == 200:
+            result = response.json()
+            print(f"Summary: {result['summary']}")
+            print(f"Detailed Analysis:")
+            for analysis in result['detailed_analysis']:
+                print(f"  {analysis['parameter']}: {analysis['value']} ({analysis['status']}) - Normal: {analysis['normal_range']}")
+            return result
+        else:
+            print(f"Error: {response.json()['error']}")
+            
+    except requests.exceptions.RequestException as e:
+        print(f"Network error: {e}")
+
+# Usage
+cbc_data = {
+    "sex": "male",
+    "wbc": 8.5,
+    "rbc": 4.2,
+    "hemoglobin": 12.8,
+    "hematocrit": 42,
+    "platelets": 280,
+    "mcv": 85,
+    "mch": 29,
+    "mchc": 34,
+    "rdw": 13.1
+}
+
+analyze_cbc(cbc_data)
 ```
 
 ## Notes
