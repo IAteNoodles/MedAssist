@@ -10,7 +10,8 @@ load_dotenv()
 
 import requests
 
-@mcp.tool("Get Top K Chunks")
+#NOT NEEDED
+'''@mcp.tool("Get Top K Chunks")
 def get_top_k_chunks(query: str, k: int = 5) -> list:
     """
     Get the top K chunks from the knowledge base that are most relevant to the query.
@@ -23,34 +24,12 @@ def get_top_k_chunks(query: str, k: int = 5) -> list:
         list: A list of dictionaries containing the top K chunks.
     """
     
-    pass
+    pass'''
 
-@mcp.tool("Extract Data from Image")
-def extract_data_from_image(image_url: str) -> dict:
-    """
-    Extract data from an image using OCR.
-    
-    Args:
-        image_url (str): The URL of the image to extract data from.
-    
-    Returns:
-        dict: A dictionary containing the extracted data.
-    """
-    
-    pass
 
-@mcp.tool("Extract Data from PDF")
-def extract_data_from_pdf(pdf_url: str) -> dict:
-    """
-    Extract data from a PDF file using OCR.
+
     
-    Args:
-        pdf_url (str): The URL of the PDF file to extract data from.
     
-    Returns:
-        dict: A dictionary containing the extracted data.
-    """
-    pass
 
 @mcp.tool("Get Diabetes Score")
 def get_diabetes_score(patient_data: dict) -> float:
@@ -77,10 +56,6 @@ def get_hypertension_score(patient_data: dict) -> float:
         float: The hypertension risk score for the patient.
     """
     pass
-
-#TODO
-@mcp.tool("Update Patient Data")
-# def save_patient_data()
     
 #TODO
 @mcp.tool("Get Patient Data")
@@ -109,9 +84,23 @@ def use_xgboost_model(data: dict) -> float:
     """
     pass
 
+@mcp.tool("Use LLM to generate medical report with symptoms and diagnosis")
+def generate_medical_report():
+    """
+    Use a large language model (LLM) to generate a medical report based on symptoms and diagnosis.
+    
+    #TODO Add parameters for symptoms and diagnosis
 
+    Returns:
+        str: The generated medical report.
+    """
+    from langchain_ollama.chat_models import ChatOllama
 
-#-------------------------PROMPTS-------------------------
+    model = ChatOllama(model="alibayram/medgemma:4b", temperature=0)
+    response = model.invoke("Generate a medical report based on the provided symptoms and diagnosis.")
+    return response.content
+
+    #-------------------------PROMPTS-------------------------
 
 #TODO
 @mcp.prompt()
@@ -123,4 +112,13 @@ def _data_prompt() -> str:
         str: A string containing the patient data input.
     """
     pass
+
+
+if __name__ == "__main__":
+    mcp.run(
+        transport="http",
+        host="0.0.0.0",
+        port=8002,
+        log_level="debug",
+    )
 
