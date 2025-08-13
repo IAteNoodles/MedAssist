@@ -8,7 +8,8 @@ const Tips = () => {
           <div className="absolute inset-0 bg-blue-700 rounded-lg transform -rotate-2"></div>
           <div className="relative bg-blue-600 rounded-lg p-12">
             <h2 className="text-4xl font-bold text-center">
-              Receive tailored health tips and alerts based on your individual data trends, <span className="opacity-75">helping you make proactive adjustments</span>
+            Our Sophisticated, AI-Powered Diagnostic Assistant
+              <span className="opacity-75"> helping you make proactive adjustments</span>
             </h2>
           </div>
         </div>

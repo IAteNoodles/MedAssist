@@ -6,18 +6,32 @@ const VideoSection = () => {
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
           <h2 className="text-4xl font-bold text-gray-900 mb-4">
-            See how Healix has transformed lives through personalized <span className="text-blue-500">health tracking and support</span>
+          API Design
           </h2>
         </div>
         <div className="relative">
           {/* This is a simplified representation. A real implementation would use a video player component. */}
           <div className="bg-black rounded-lg h-96 flex items-center justify-center">
-            <p className="text-white">Video Player Placeholder</p>
+          <div className="bg-gray-100 p-4 rounded-lg">
+              <pre className="text-sm text-white overflow-x-auto">
+                <code>
+                  {`
+{
+  "patient_id": "UUID",
+  "encounter_id": "UUID",
+  "symptoms_text": "...",
+  "labs": [{"code":"HB", "value":12.8, "unit":"g/dL", "collected_at":"..."}],
+  "artifacts": [{"artifact_id":"...", "path":"s3://.../report.pdf"}]
+}
+                  `}
+                </code>
+              </pre>
+            </div>
           </div>
         </div>
         <div className="text-center mt-12">
           <h3 className="text-2xl font-semibold text-gray-800 mb-4">
-            Have a success story with Healix? We’d love to <span className="text-gray-500">hear from you!</span>
+          A robust and intuitive API for seamless integration and interaction with our diagnostic assistant.
           </h3>
           <a href="/contact" className="inline-block bg-white hover:bg-gray-100 text-gray-800 font-bold py-3 px-6 rounded-lg border border-gray-300">
             Share your video

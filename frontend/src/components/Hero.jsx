@@ -10,10 +10,10 @@ const Hero = () => {
             <div>
               <div className="inline-flex items-center bg-white rounded-full p-1 pr-4 mb-4">
                 <img src="https://cdn.prod.website-files.com/67469be284b048fa58eda575/6747f658f2a000f871440bc4_union.svg" loading="lazy" alt="" className="mr-2" />
-                <p className="text-sm font-medium text-gray-600">Reliable Solutions for Everyday Care</p>
+                <p className="text-sm font-medium text-gray-600">A Clinician-Facing, Agentic Diagnosis Assistant</p>
               </div>
-              <h1 className="text-5xl font-bold text-gray-900 mb-4">Where care meets innovation</h1>
-              <p className="text-lg text-gray-600 mb-6">From daily wellness to advanced health insights, our platform is designed to support you.</p>
+              <h1 className="text-5xl font-bold text-gray-900 mb-4">Diagnosis Assistant for Doctors</h1>
+              <p className="text-lg text-gray-600 mb-6">The assistant is decision support, not autonomous care, emphasizing explainability, auditability, and data security.</p>
               <div className="flex items-center space-x-4">
                 <a href="/pricing" className="inline-block bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg">
                   Get Started For Free
