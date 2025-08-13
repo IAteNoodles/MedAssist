@@ -78,25 +78,29 @@ def analyze_intent_node(state: AgentState):
     ai_message = llm_with_tools.invoke(prompt.format(query=query))
     
     if not isinstance(ai_message, AIMessage) or not ai_message.tool_calls:
-        # If no tool is called, we can't proceed.
-        # We'll add a message to the state and let the graph end.
-        # A more robust solution might involve asking for clarification.
+        # If no tool is called, set empty intent and ask for clarification via edge
         return {
-            "messages": state['messages'] + [AIMessage(content="I could not determine the intent or extract the required parameters from your query. Please be more specific.")]
+            "messages": state['messages'] + [AIMessage(content="I could not determine the intent or extract the required parameters from your query. Please be more specific.")],
+            "intent": "",
+            "required_params": [],
+            "extracted_data": {},
         }
 
     extracted_tool = ai_message.tool_calls[0]
     tool_name = extracted_tool.get("name")
-    # Map tool name back to our intent keys (since binding uses class names)
-    if tool_name == DiabetesParams.__name__:
+    # Map tool name back to our intent keys (support both class names and intent aliases)
+    if tool_name in (DiabetesParams.__name__, "predict_diabetes"):
         intent = "predict_diabetes"
         tool_cls = DiabetesParams
-    elif tool_name == HypertensionParams.__name__:
+    elif tool_name in (HypertensionParams.__name__, "predict_hypertension"):
         intent = "predict_hypertension"
         tool_cls = HypertensionParams
     else:
         return {
-            "messages": state['messages'] + [AIMessage(content=f"Unrecognized tool '{tool_name}'. Please rephrase your request.")]
+            "messages": state['messages'] + [AIMessage(content=f"Unrecognized tool '{tool_name}'. Please rephrase your request.")],
+            "intent": "",
+            "required_params": [],
+            "extracted_data": {},
         }
 
     extracted_data = extracted_tool.get("args", {})
@@ -120,16 +124,30 @@ def execute_model_node(state: AgentState):
     data = state["extracted_data"]
     result = {}
 
+    def _call_tool(tool_obj, arg: dict) -> float:
+        # Support FastMCP-decorated tools by calling their underlying function
+        if hasattr(tool_obj, "func") and callable(getattr(tool_obj, "func")):
+            return cast(float, tool_obj.func(arg))
+        # Fallbacks for other wrappers
+        if hasattr(tool_obj, "invoke") and callable(getattr(tool_obj, "invoke")):
+            return cast(float, tool_obj.invoke(arg))
+        if hasattr(tool_obj, "run") and callable(getattr(tool_obj, "run")):
+            return cast(float, tool_obj.run(arg))
+        # Last resort: attempt direct call (works if it's a plain function)
+        if callable(tool_obj):
+            return cast(float, tool_obj(arg))
+        raise TypeError("Unsupported tool callable wrapper for model execution")
+
     if intent == "predict_diabetes":
-        # Current local tool may be a decorated tool wrapper; cast to callable
-        score = cast(Callable[[dict], float], get_diabetes_score)(data)
+        # Call decorated tool safely
+        score = _call_tool(get_diabetes_score, data)
         result = {
             "disease": "Diabetes",
             "risk_score": score,
             "full_report": {"risk_probability": score, "inputs": data},
         }
     elif intent == "predict_hypertension":
-        score = cast(Callable[[dict], float], get_hypertension_score)(data)
+        score = _call_tool(get_hypertension_score, data)
         result = {
             "disease": "Hypertension",
             "risk_score": score,
@@ -182,6 +200,9 @@ def data_validation_edge(state: AgentState):
     Checks if all required data is present. If not, asks the user.
     """
     print("--- वैलिडेटिंग डेटा (Validating Data) ---")
+    # If intent wasn't determined, ask user for clarification
+    if not state.get("intent"):
+        return "end_and_ask_user"
     required = set(state["required_params"])
     extracted = set(state["extracted_data"].keys())
     missing_keys = list(required - extracted)
@@ -209,7 +230,14 @@ def ask_user_node(state: AgentState):
         content=f"The following parameters are missing for the {state['intent']} model: **{missing_keys_str}**. "
                 f"Please provide them to proceed."
     )
-    return {"messages": [prompt_for_more_data]}
+    # Append to message history and keep state fields
+    return {
+        "messages": state['messages'] + [prompt_for_more_data],
+        "intent": state.get("intent", ""),
+        "required_params": state.get("required_params", []),
+        "extracted_data": state.get("extracted_data", {}),
+        "model_result": state.get("model_result"),
+    }
 
 workflow.add_node("ask_user_node", ask_user_node)
 workflow.set_entry_point("analyze_intent")
