@@ -1,0 +1,13 @@
+agent-system/lib64
+agent-system/pyvenv.cfg
+# Created by venv; see https://docs.python.org/3/library/venv.html
+.env
+bin/
+include/
+lib/
+lib64/
+
+.env
+__pycache__
+.venv
+venv
