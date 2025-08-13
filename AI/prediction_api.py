@@ -83,11 +83,13 @@ def format_shap_explanation(shap_values: np.ndarray, feature_names: List[str],
     """Format SHAP values into interpretable explanations"""
     explanations = []
     
-    # Get the SHAP values for the positive class (index 1)
-    if len(shap_values.shape) > 1 and shap_values.shape[1] > 1:
-        shap_vals = shap_values[0, :, 1]  # For binary classification
+    # Get the SHAP values for the first sample
+    # For XGBoost binary classification, shap_values is 2D: (samples, features)
+    if len(shap_values.shape) == 2:
+        shap_vals = shap_values[0]  # Get SHAP values for the first sample
     else:
-        shap_vals = shap_values[0]
+        # Handle other cases (e.g., 1D array)
+        shap_vals = shap_values
     
     for i, (feature, shap_val, feature_val) in enumerate(zip(feature_names, shap_vals, feature_values[0])):
         impact = "increases" if shap_val > 0 else "decreases"
