@@ -3,7 +3,7 @@ import { Search, Bell } from 'lucide-react';
 
 const Header = () => {
   return (
-    <header className="bg-white shadow-sm">
+    <header className="sticky top-0 bg-white/70 backdrop-blur-md shadow-sm z-50 border-b border-gray-200/50">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between py-3">
           <div className="flex items-center">

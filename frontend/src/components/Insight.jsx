@@ -1,39 +1,72 @@
 import React from 'react';
+import { motion } from 'framer-motion';
+import { TrendingUp, Zap } from 'lucide-react';
 
 const Insight = () => {
+  const containerVariants = {
+    hidden: { opacity: 0, y: 50 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.8,
+        ease: "easeOut",
+        staggerChildren: 0.3
+      },
+    },
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0 },
+  };
+
   return (
-    <section className="py-20 bg-gray-50">
+    <motion.section 
+      className="py-24"
+      variants={containerVariants}
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true, amount: 0.3 }}
+    >
       <div className="container mx-auto px-4">
-        <div className="bg-white rounded-lg shadow-lg p-8 md:p-12">
-          <div className="grid md:grid-cols-2 gap-8 items-center">
-            <div>
-              <h2 className="text-4xl font-bold text-gray-900">
-                Studies show that proactive health tracking can reduce chronic <span className="text-gray-500">health risks by up to 78%</span>
-              </h2>
-            </div>
-            <div className="bg-gray-100 p-6 rounded-lg">
-              <div className="flex justify-between items-start mb-4">
-                <img src="https://cdn.prod.website-files.com/67469be284b048fa58eda575/67480601e163925393a93976_insight.svg" loading="lazy" alt="" className="w-8 h-8" />
-                <a href="/features" className="text-sm font-semibold text-blue-500 hover:text-blue-600">Explore</a>
-              </div>
-              <h4 className="font-bold text-lg mb-2">Health Monitoring Matters</h4>
-              <p className="text-sm text-gray-600 mb-4">Studies show that proactive health tracking can reduce chronic health risks by up to</p>
-              <div className="flex items-center justify-between">
-                <h3 className="text-3xl font-bold">78%</h3>
-                <img src="https://cdn.prod.website-files.com/67469be284b048fa58eda575/6748071e6774c9d5172580b6_menu.svg" loading="lazy" alt="" />
-              </div>
-              <div className="flex flex-wrap gap-2 mt-6">
-                <span className="bg-gray-200 text-gray-800 px-2 py-1 rounded-full text-xs">Rehabilitation</span>
-                <span className="bg-gray-200 text-gray-800 px-2 py-1 rounded-full text-xs">Healthcare</span>
-                <span className="bg-gray-200 text-gray-800 px-2 py-1 rounded-full text-xs">Monitoring</span>
-                <span className="bg-gray-200 text-gray-800 px-2 py-1 rounded-full text-xs">Technology</span>
-                <span className="bg-gray-200 text-gray-800 px-2 py-1 rounded-full text-xs">Personalized</span>
-              </div>
+        <motion.div 
+          className="bg-white/60 backdrop-blur-md rounded-2xl shadow-xl border border-white/30 overflow-hidden"
+          variants={itemVariants}
+        >
+          <div className="p-8 md:p-12">
+            <div className="grid md:grid-cols-2 gap-8 items-center">
+              <motion.div variants={itemVariants}>
+                <h2 className="text-5xl font-extrabold text-gray-900 leading-tight">
+                  Reduce Chronic Health Risks by up to <span className="text-blue-600">78%</span>
+                </h2>
+                <p className="mt-4 text-lg text-gray-600">
+                  Studies show that proactive health tracking and early intervention are key to long-term wellness. Our platform empowers you to take control.
+                </p>
+              </motion.div>
+              <motion.div 
+                className="bg-gray-50/50 p-8 rounded-2xl shadow-lg border border-gray-200/80"
+                variants={itemVariants}
+                whileHover={{ scale: 1.05, boxShadow: "0px 10px 30px rgba(0, 0, 0, 0.1)" }}
+              >
+                <div className="flex justify-between items-start mb-4">
+                  <div className="bg-blue-100 p-3 rounded-xl">
+                    <TrendingUp className="text-blue-600" size={28} />
+                  </div>
+                  <a href="/features" className="text-sm font-semibold text-blue-600 hover:underline">Explore Features</a>
+                </div>
+                <h4 className="font-bold text-xl mb-2">Health Monitoring Matters</h4>
+                <p className="text-sm text-gray-600 mb-4">Proactive tracking is proven to significantly lower risks associated with chronic conditions.</p>
+                <div className="flex items-center justify-between mt-6">
+                  <h3 className="text-6xl font-bold text-blue-600">78%</h3>
+                  <Zap className="text-yellow-400" size={40} />
+                </div>
+              </motion.div>
             </div>
           </div>
-        </div>
+        </motion.div>
       </div>
-    </section>
+    </motion.section>
   );
 };
 

@@ -1,12 +1,12 @@
 import React from 'react';
-import DashboardHeader from '../components/DashboardHeader';
+import Header from '../components/Header';
 import Dashboard from '../components/Dashboard';
 import Footer from '../components/Footer';
 
 const DashboardPage = () => {
   return (
     <div className="bg-gray-50 min-h-screen">
-      <DashboardHeader />
+      <Header />
       <main>
         <Dashboard />
       </main>

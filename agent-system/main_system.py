@@ -1,32 +1,34 @@
 import os
 import operator
-from typing import TypedDict, Annotated, List, Optional
+from typing import TypedDict, Annotated, List, Optional, Callable, cast
 
 from langchain_core.messages import AnyMessage, HumanMessage, AIMessage, BaseMessage
 from langchain_groq import ChatGroq # CHANGED: Import ChatGroq instead of ChatOpenAI
 from langchain.pydantic_v1 import BaseModel, Field
 from langgraph.graph import StateGraph, END
 
-# Import the MCP server tools
-from mcp import get_diabetes_score, get_hypertension_score
+# Import the local MCP-exposed tools (mock implementations here)
+from models import get_diabetes_score, get_hypertension_score
 
 # --- 1. Define Model Parameter Schemas ---
 # (This section remains unchanged)
 class DiabetesParams(BaseModel):
-    """Parameters required for the diabetes prediction model."""
-    Glucose: Optional[float] = Field(description="Plasma glucose concentration.")
-    BMI: Optional[float] = Field(description="Body mass index.")
-    Age: Optional[int] = Field(description="Age in years.")
-    Pregnancies: Optional[int] = Field(description="Number of times pregnant.")
-    BloodPressure: Optional[float] = Field(description="Diastolic blood pressure (mm Hg).")
-    Insulin: Optional[float] = Field(description="2-Hour serum insulin (mu U/ml).")
+    """Parameters for the diabetes prediction model."""
+    age: int = Field(description="Age in years.")
+    gender: str = Field(description='"Female", "Male", or "Other".')
+    hypertension: int = Field(description="0 for No, 1 for Yes.")
+    heart_disease: int = Field(description="0 for No, 1 for Yes.")
+    smoking_history: str = Field(description='"never", "No Info", "current", "former", "ever", or "not current".')
+    bmi: float = Field(description="Body Mass Index.")
+    HbA1c_level: float = Field(description="Hemoglobin A1c level (e.g., 5.7).")
+    blood_glucose_level: float = Field(description="Blood glucose level (e.g., 100 mg/dL).")
 
 class HypertensionParams(BaseModel):
-    """Parameters required for the hypertension prediction model."""
-    Age: Optional[int] = Field(description="Age in years.")
-    BMI: Optional[float] = Field(description="Body mass index.")
-    BloodPressure: Optional[float] = Field(description="Diastolic blood pressure (mm Hg).")
-    Cholesterol: Optional[float] = Field(description="Total cholesterol (mg/dl).")
+    """Parameters for the hypertension prediction model."""
+    age: int = Field(description="Age in years.")
+    bmi: float = Field(description="Body Mass Index.")
+    blood_pressure: int = Field(description="Systolic blood pressure (e.g., 120).")
+    cholesterol: int = Field(description="Total cholesterol level (e.g., 200).")
 
 
 # --- 2. Define the Agent's State (Memory) ---
@@ -45,7 +47,7 @@ load_dotenv()
 
 # CHANGED: Initialize the Groq model.
 # Llama-3.1-8b-instant is extremely fast, so we can use the same instance for all tasks.
-llm = ChatGroq(model_name="llama-3.1-8b-instant", temperature=0)
+llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0)
 
 
 # --- 4. Define Agent Nodes ---
@@ -70,18 +72,38 @@ def analyze_intent_node(state: AgentState):
     }
     
     # CHANGED: Bind tools to the Groq LLM
-    llm_with_tools = llm.bind_tools(tools.values())
+    llm_with_tools = llm.bind_tools(list(tools.values()))
     
     query = state["messages"][-1].content
     ai_message = llm_with_tools.invoke(prompt.format(query=query))
     
+    if not isinstance(ai_message, AIMessage) or not ai_message.tool_calls:
+        # If no tool is called, we can't proceed.
+        # We'll add a message to the state and let the graph end.
+        # A more robust solution might involve asking for clarification.
+        return {
+            "messages": state['messages'] + [AIMessage(content="I could not determine the intent or extract the required parameters from your query. Please be more specific.")]
+        }
+
     extracted_tool = ai_message.tool_calls[0]
-    intent = extracted_tool["name"]
-    extracted_data = extracted_tool["args"]
+    tool_name = extracted_tool.get("name")
+    # Map tool name back to our intent keys (since binding uses class names)
+    if tool_name == DiabetesParams.__name__:
+        intent = "predict_diabetes"
+        tool_cls = DiabetesParams
+    elif tool_name == HypertensionParams.__name__:
+        intent = "predict_hypertension"
+        tool_cls = HypertensionParams
+    else:
+        return {
+            "messages": state['messages'] + [AIMessage(content=f"Unrecognized tool '{tool_name}'. Please rephrase your request.")]
+        }
+
+    extracted_data = extracted_tool.get("args", {})
 
     cleaned_data = {k: v for k, v in extracted_data.items() if v is not None}
     
-    required_params = list(tools[intent].__fields__.keys())
+    required_params = list(tool_cls.__fields__.keys())
 
     return {
         "intent": intent,
@@ -99,11 +121,20 @@ def execute_model_node(state: AgentState):
     result = {}
 
     if intent == "predict_diabetes":
-        score = get_diabetes_score(data)
-        result = {"disease": "Diabetes", "risk_score": score}
+        # Current local tool may be a decorated tool wrapper; cast to callable
+        score = cast(Callable[[dict], float], get_diabetes_score)(data)
+        result = {
+            "disease": "Diabetes",
+            "risk_score": score,
+            "full_report": {"risk_probability": score, "inputs": data},
+        }
     elif intent == "predict_hypertension":
-        score = get_hypertension_score(data)
-        result = {"disease": "Hypertension", "risk_score": score}
+        score = cast(Callable[[dict], float], get_hypertension_score)(data)
+        result = {
+            "disease": "Hypertension",
+            "risk_score": score,
+            "full_report": {"risk_probability": score, "inputs": data},
+        }
 
     return {"model_result": result}
 
@@ -112,8 +143,12 @@ def clinical_bert_analyzer_node(state: AgentState):
     Generates a final report, simulating a Clinical BERT analysis.
     """
     print("--- जेनरेटिंग रिपोर्ट (Generating Report) ---")
-    result = state["model_result"]
-    data = state["extracted_data"]
+    result = state.get("model_result")
+    data = state.get("extracted_data")
+
+    if not result:
+        final_message = AIMessage(content="Could not retrieve model results. Please check the inputs or the MCP server.")
+        return {"messages": state['messages'] + [final_message]}
 
     prompt = f"""
     You are an expert Clinical Analysis AI (simulating ClinicalBERT).
@@ -123,8 +158,8 @@ def clinical_bert_analyzer_node(state: AgentState):
     {data}
 
     **Model Prediction:**
-    - Disease Assessed: {result['disease']}
-    - Calculated Risk Score: {result['risk_score']} (A score > 0.6 is considered high risk)
+    - Disease Assessed: {result.get('disease', 'N/A')}
+    - Calculated Risk Score: {result.get('risk_score', 'N/A')} (A score > 0.6 is considered high risk)
 
     **Your Tasks:**
     1.  **Summary**: Write a one-sentence summary of the finding.
@@ -136,8 +171,8 @@ def clinical_bert_analyzer_node(state: AgentState):
     """
     # CHANGED: Use the Groq LLM for generating the report
     report = llm.invoke(prompt).content
-    final_message = AIMessage(content=report + "\n\nIs there anything else I can assist you with?")
-    return {"messages": [final_message]}
+    final_message = AIMessage(content=str(report) + "\n\nIs there anything else I can assist you with?")
+    return {"messages": state['messages'] + [final_message]}
 
 
 # --- 5. Define Conditional Logic (Edge) ---
@@ -195,20 +230,32 @@ app = workflow.compile()
 # (This section remains unchanged)
 def run_chat():
     print("🏥 Medical AI Assistant is online (Powered by Groq/Llama-3.1). How can I help you today?")
-    conversation_history = []
+    
+    # Maintain the conversation history
+    messages = []
     
     while True:
         user_input = input("Doctor: ")
         if user_input.lower() in ["quit", "exit"]:
             break
 
-        conversation_history.append(HumanMessage(content=user_input))
+        messages.append(HumanMessage(content=user_input))
         
-        result = app.invoke({"messages": conversation_history})
+        # Construct the full state to pass to the graph
+        initial_state: AgentState = {
+            "messages": messages,
+            "intent": "",
+            "required_params": [],
+            "extracted_data": {},
+            "model_result": None,
+        }
         
-        conversation_history.extend(result['messages'][-1:])
+        result = app.invoke(initial_state)
         
-        print(f"\nAssistant:\n{result['messages'][-1].content}\n")
+        # Update the conversation history from the final state
+        messages = result['messages']
+        
+        print(f"\nAssistant:\n{messages[-1].content}\n")
 
 if __name__ == "__main__":
     run_chat()
