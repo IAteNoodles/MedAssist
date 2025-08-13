@@ -113,3 +113,4 @@ Some parts of this project require API keys to function correctly.
 
 -   **Groq API Key:** The `agent-system` uses the Groq API for its Large Language Model. You need to get an API key from [Groq](https://console.groq.com/keys) and set it as an environment variable. See `agent-system/README.md` for more details.
 -   **Hugging Face API Key:** The `AI/pmc_llama.py` script might require a Hugging Face API key if you intend to use models from the Hugging Face Hub.
+-   **Mistral API Key:** The project may also use the Mistral API. If so, you will need to get an API key from [Mistral AI](https://console.mistral.ai/api-keys/) and set it as an environment variable.
