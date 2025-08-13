@@ -67,33 +67,33 @@ The following diagram illustrates the overall workflow of the MedAssist applicat
 
 ```mermaid
 graph TD
-    A[User] --> B{Frontend (React)};
-    B --> C{Backend (Python/Flask)};
-    C --> D[Database];
-    C --> E{AI API (FastAPI)};
-    E --> F[ML Models (XGBoost)];
-    G[Agent System] --> H{MCP Server (Python)};
-    H --> E;
-
     subgraph "User Interaction"
-        A
+        A[User]
     end
 
     subgraph "Web Application"
-        B
-        C
-        D
+        B["Frontend (React)"]
+        C["Backend (Python/Flask)"]
+        D["Database"]
     end
 
     subgraph "AI & ML"
-        E
-        F
+        E["AI API (FastAPI)"]
+        F["ML Models (XGBoost)"]
     end
 
     subgraph "Conversational AI"
-        G
-        H
+        G["Agent System"]
+        H["MCP Server (Python)"]
     end
+
+    A --> B
+    B --> C
+    C --> D
+    C --> E
+    E --> F
+    G --> H
+    H --> E
 ```
 
 ## Setup
