@@ -4,3 +4,5 @@ langgraph
 fastmcp
 python-dotenv
 pydantic
+fastapi
+uvicorn
